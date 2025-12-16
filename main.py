@@ -1,83 +1,75 @@
-import requests
-from datetime import datetime
 from database import Database
-from usuario import Usuario
-from indicador import IndicadorEconomico
+from auth import AuthService
+from services import UsuarioService, IndicadorService
+from models import Indicador
+from datetime import datetime
+import requests
+import getpass  # Librería para ocultar la contraseña al escribirla
 
-# Se inicializa la base de datos
+# Inicialización de las capas del sistema
 db = Database()
+auth = AuthService()
+usuario_service = UsuarioService(db, auth)
+indicador_service = IndicadorService(db)
 
-def registrar_usuario():
+def menu():
     """
-    Permite registrar un usuario nuevo en el sistema.
-    La contraseña se almacena de forma segura.
+    Muestra el menú principal del sistema.
     """
-    username = input("Usuario: ")
-    password = input("Contraseña: ")
+    print("\n1. Crear usuario (POST)")
+    print("2. Consultar indicador y guardar (POST)")
+    print("3. Actualizar indicador (PUT)")
+    print("4. Eliminar indicador (DELETE)")
+    print("5. Salir")
 
-    salt = Usuario.generar_salt()
-    password_hash = Usuario.generar_hash(password, salt)
+while True:
+    menu()
+    opcion = input("Seleccione opción: ")
 
-    db.insertar_usuario(username, password_hash, salt)
-    print("Usuario registrado correctamente.")
+    if opcion == "1":
+        # Registro de usuario
+        usuario = input("Usuario: ")
 
-def login():
-    """
-    Permite autenticar a un usuario verificando su contraseña.
-    """
-    username = input("Usuario: ")
-    password = input("Contraseña: ")
+        # La contraseña NO se muestra en pantalla al escribirla
+        password = getpass.getpass("Contraseña: ")
 
-    usuario = db.obtener_usuario(username)
-    if usuario:
-        _, hash_guardado, salt = usuario
-        if Usuario.verificar_password(password, salt, hash_guardado):
-            print("Autenticación exitosa.")
-            return username
+        usuario_service.crear_usuario(usuario, password)
+        print("Usuario creado correctamente.")
 
-    print("Credenciales incorrectas.")
-    return None
+    elif opcion == "2":
+        # Consulta de indicador económico
+        indicador = input("Indicador (uf, ipc, utm, dolar, euro): ")
+        fecha = input("Fecha (dd-mm-aaaa): ")
 
-def consultar_indicador(usuario):
-    """
-    Consulta un indicador económico desde la API externa
-    y permite guardarlo en la base de datos.
-    """
-    indicador = input("Indicador (uf, ipc, utm, dolar, euro): ")
-    fecha = input("Fecha (dd-mm-aaaa): ")
+        url = f"https://mindicador.cl/api/{indicador}/{fecha}"
+        data = requests.get(url).json()['serie'][0]
 
-    url = f"https://mindicador.cl/api/{indicador}/{fecha}"
+        indicador_obj = Indicador(
+            indicador,
+            data['fecha'],
+            data['valor'],
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "admin",
+            "mindicador.cl"
+        )
 
-    try:
-        response = requests.get(url)
-        response.raise_for_status()  # Verifica si la petición fue exitosa
+        indicador_service.registrar_indicador(indicador_obj)
+        print("Indicador registrado.")
 
-        data = response.json()
-        serie = data['serie'][0]
+    elif opcion == "3":
+        # Actualización de indicador (PUT)
+        id_ind = input("ID del indicador: ")
+        nuevo_valor = input("Nuevo valor: ")
+        indicador_service.actualizar_valor(id_ind, nuevo_valor)
+        print("Indicador actualizado.")
 
-        indicador_obj = IndicadorEconomico.desde_json(indicador, serie)
+    elif opcion == "4":
+        # Eliminación de indicador (DELETE)
+        id_ind = input("ID del indicador: ")
+        indicador_service.eliminar_indicador(id_ind)
+        print("Indicador eliminado.")
 
-        guardar = input("¿Desea guardar el indicador? (s/n): ")
-        if guardar.lower() == 's':
-            db.insertar_indicador(
-                indicador_obj.nombre,
-                indicador_obj.fecha,
-                indicador_obj.valor,
-                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                usuario,
-                "mindicador.cl"
-            )
-            print("Indicador almacenado correctamente.")
-
-    except Exception as e:
-        print("Error al consultar el indicador:", e)
-
-# Menú principal del programa
-opcion = input("1. Registrar\n2. Login\nSeleccione opción: ")
-
-if opcion == "1":
-    registrar_usuario()
-elif opcion == "2":
-    usuario_autenticado = login()
-    if usuario_autenticado:
-        consultar_indicador(usuario_autenticado)
+    elif opcion == "5":
+        # Salida del sistema
+        print("Saliendo del sistema...")
+        break
