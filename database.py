@@ -2,45 +2,64 @@ import sqlite3
 
 class Database:
     """
-    Clase que se encarga de toda la comunicación con la base de datos.
-    Centraliza las operaciones para evitar duplicar código.
+    Clase encargada de manejar la conexión a la base de datos
+    y todas las operaciones relacionadas con ella.
     """
 
     def __init__(self, db_name="indicadores.db"):
-        # Se establece la conexión con la base de datos SQLite
+        # Se crea la conexión a la base de datos SQLite
         self.connection = sqlite3.connect(db_name)
         self.cursor = self.connection.cursor()
 
-    def insertar_usuario(self, username, password_hash, salt):
-        """
-        Inserta un nuevo usuario en la base de datos.
-        Se almacena el hash de la contraseña y su salt asociada.
-        """
-        self.cursor.execute("""
-            INSERT INTO usuarios (username, password_hash, salt)
-            VALUES (?, ?, ?)
-        """, (username, password_hash, salt))
-        self.connection.commit()  # Confirma los cambios en la base de datos
+        # Al iniciar la aplicación, se crean automáticamente las tablas
+        self.crear_tablas()
 
-    def obtener_usuario(self, username):
+    def crear_tablas(self):
         """
-        Obtiene los datos de un usuario específico.
-        Se utiliza durante el proceso de autenticación.
+        Crea las tablas necesarias si no existen.
+        Esto evita tener que ejecutar scripts SQL manualmente.
         """
         self.cursor.execute("""
-            SELECT username, password_hash, salt
-            FROM usuarios
-            WHERE username = ?
-        """, (username,))
-        return self.cursor.fetchone()  # Retorna una fila o None
+        CREATE TABLE IF NOT EXISTS usuarios (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            salt BLOB NOT NULL
+        )
+        """)
 
-    def insertar_indicador(self, nombre, fecha_indicador, valor, fecha_consulta, usuario, proveedor):
-        """
-        Guarda en la base de datos un indicador económico consultado.
-        """
         self.cursor.execute("""
-            INSERT INTO indicadores
-            (nombre_indicador, fecha_indicador, valor, fecha_consulta, usuario, proveedor)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (nombre, fecha_indicador, valor, fecha_consulta, usuario, proveedor))
+        CREATE TABLE IF NOT EXISTS indicadores (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre TEXT NOT NULL,
+            fecha_indicador TEXT NOT NULL,
+            valor REAL NOT NULL,
+            fecha_consulta TEXT NOT NULL,
+            usuario TEXT NOT NULL,
+            proveedor TEXT NOT NULL
+        )
+        """)
         self.connection.commit()
+
+    def insertar(self, query, params):
+        """
+        Método genérico para operaciones tipo POST (INSERT).
+        """
+        self.cursor.execute(query, params)
+        self.connection.commit()
+
+    def ejecutar(self, query, params):
+        """
+        Método genérico para operaciones PUT (UPDATE) y DELETE.
+        """
+        self.cursor.execute(query, params)
+        self.connection.commit()
+
+    def obtener(self, query, params=()):
+        """
+        Método para obtener información desde la base de datos (GET).
+        """
+        self.cursor.execute(query, params)
+        return self.cursor.fetchall()
+
+
